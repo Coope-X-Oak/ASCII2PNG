@@ -1,18 +1,47 @@
 from flask import Flask, render_template, request, send_file, jsonify
 import os
+import sys
 import time
-from PIL import ImageColor
-from ascii2png.parser import parse
-from ascii2png.layout import layout_tree
-from ascii2png.render import render_scene
-from ascii2png.theme import get_theme
+import glob
+from ascii2png.core import CoreService
+from ascii2png.utils import hex_to_rgb
 
-app = Flask(__name__)
+def resource_path(relative_path):
+    """Get absolute path to resource, works for dev and for PyInstaller"""
+    if hasattr(sys, '_MEIPASS'):
+        return os.path.join(sys._MEIPASS, relative_path)
+    return os.path.join(os.path.abspath("."), relative_path)
+
+# Initialize Flask with explicit folder paths
+app = Flask(__name__, 
+            template_folder=resource_path('templates'), 
+            static_folder=resource_path('static'))
 
 # Ensure output directory exists
-OUTPUT_DIR = os.path.join(os.getcwd(), "output")
+if getattr(sys, 'frozen', False):
+    # If frozen, use the directory of the executable
+    BASE_DIR = os.path.dirname(sys.executable)
+else:
+    # If running as script, use the directory of the script
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+OUTPUT_DIR = os.path.join(BASE_DIR, "output")
 if not os.path.exists(OUTPUT_DIR):
     os.makedirs(OUTPUT_DIR)
+
+def cleanup_old_files(max_age_seconds=3600):
+    """Delete files older than max_age_seconds in OUTPUT_DIR"""
+    try:
+        now = time.time()
+        for f in glob.glob(os.path.join(OUTPUT_DIR, "web_*.png")):
+            if os.path.isfile(f):
+                if now - os.path.getmtime(f) > max_age_seconds:
+                    try:
+                        os.remove(f)
+                    except OSError:
+                        pass
+    except Exception:
+        pass
 
 @app.route('/')
 def index():
@@ -20,6 +49,10 @@ def index():
 
 @app.route('/generate', methods=['POST'])
 def generate():
+    # Cleanup old files on every request (simple approach)
+    # Ideally this should be a background task
+    cleanup_old_files()
+
     try:
         data = request.json
         text = data.get('text', '')
@@ -34,33 +67,35 @@ def generate():
         if not text.strip():
             return jsonify({'error': 'Input text cannot be empty'}), 400
 
-        # Parse and Generate
-        root = parse(text)
+        # Prepare options
+        layout_options = {
+            "layout_mode": layout_mode,
+            "line_style": line_style
+        }
         
-        # Font size fixed for web demo or adjustable? Let's fix it for now or use default
-        font_size = 24
-        
-        # Get Theme
-        colors = get_theme(theme_name, font_size)
-        
-        # Apply extended options
-        colors["layout_mode"] = layout_mode
-        colors["line_style"] = line_style
+        custom_colors = {}
         if line_color:
              try:
-                colors["line"] = ImageColor.getrgb(line_color)
+                rgb = hex_to_rgb(line_color)
+                custom_colors["line"] = rgb
              except ValueError:
                 pass
         
-        # Layout
-        scene = layout_tree(root, width, colors["font_size"], colors)
-        
-        # Render
         # We need a unique filename for the web session
         timestamp = int(time.time() * 1000)
-        # Using a temporary output path logic handled by render_scene, but we want to know the file
-        # render_scene returns the full path
-        path = render_scene(scene, width, f"web_{timestamp}", OUTPUT_DIR)
+        filename_hint = f"web_{timestamp}"
+        
+        # Use CoreService
+        path = CoreService.convert(
+            text=text,
+            width=width,
+            theme=theme_name,
+            font_size=24, # Fixed for web demo as per original
+            output_dir=OUTPUT_DIR,
+            custom_colors=custom_colors if custom_colors else None,
+            layout_options=layout_options,
+            filename_hint=filename_hint
+        )
         
         # Return the filename to be served
         filename = os.path.basename(path)
@@ -74,5 +109,16 @@ def serve_image(filename):
     return send_file(os.path.join(OUTPUT_DIR, filename))
 
 if __name__ == '__main__':
-    print("Starting Web GUI at http://localhost:5000")
-    app.run(debug=True, port=5000)
+    port = 5000
+    url = f"http://localhost:{port}"
+    print(f"Starting Web GUI at {url}")
+    
+    # Auto open browser
+    import webbrowser
+    from threading import Timer
+    def open_browser():
+        webbrowser.open_new(url)
+    Timer(1.5, open_browser).start()
+    
+    # Disable debug mode for production-like usage
+    app.run(debug=False, port=port)

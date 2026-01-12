@@ -1,105 +1,79 @@
-# ASCII 图表转 PNG 工具
+# ASCII2PNG Web
 
-本工具用于将 ASCII 树状图/层级知识架构图转换为适配微信阅读的 PNG 图片（宽度 1080px，高度自适应），支持命令行与图形界面输入，支持批量处理、主题和字体大小自定义，并采用优化策略保证图片清晰可读且文件大小控制在 1MB 以内。
+ASCII2PNG 是一个基于 Web 的工具，用于将 ASCII 树状图/层级知识架构图转换为适配微信阅读的 PNG 图片（宽度 1080px，高度自适应）。
 
-## 安装
-- 需要 Python 3.8+
-- 安装 Pillow：
+## 特性
 
-```bash
-pip install pillow
-```
+- **Web 界面**：简洁易用的浏览器界面，支持实时预览。
+- **多种主题**：支持 WeChat、Light、Dark 等多种配色主题。
+- **智能布局**：自动解析 ASCII 树形结构，生成清晰的 PNG 图片。
+- **移动端优化**：固定宽度 1080px，字体大小适中，适合在手机上阅读。
+- **文件优化**：自动控制输出文件大小在 1MB 以内，方便分享。
 
-Windows 字体建议系统自带的 Microsoft YaHei（msyh.ttc）。如未检测到，将自动回退到系统默认字体。
+## 使用方式
 
-## 使用
+### 方法一：Windows 一键启动（推荐）
 
-### 命令行
-在项目根目录执行：
+直接双击运行项目目录下的 `start.bat`。
+- 脚本会自动检查依赖并启动服务。
+- 浏览器会自动打开 [http://localhost:5000](http://localhost:5000)。
 
-```bash
-python main.py --text "Root\n├── Child A\n└── Child B" --theme wechat --font 24 --width 1080 --output ./output
-```
+### 方法二：命令行启动
 
-或处理单个文件：
+1. **环境要求**
+   - Python 3.8+
+   - pip
 
-```bash
-python main.py --input ./examples/diagram.txt --output ./output
-```
+2. **安装依赖**
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-批量处理目录下所有 .txt/.asc/.ascii/.md 文件：
+3. **启动应用**
+   ```bash
+   python web_app.py
+   ```
+   启动后，浏览器会自动访问 [http://localhost:5000](http://localhost:5000)。
 
-```bash
-python main.py --batch ./inputs --output ./output --theme dark --font 26
-```
+### 方法三：Docker 部署
 
-参数说明：
-- `--text` 直接传入 ASCII 文本
-- `--input` 输入文件路径，UTF-8 文本
-- `--batch` 输入目录，批量处理
-- `--output` 输出目录，默认 `./output`
-- `--width` 输出宽度，默认 1080
-- `--theme` 主题，可选 `wechat|light|dark`，默认 `wechat`
-- `--font` 字体大小（像素），默认 24
-- `--gui` 启动图形界面
+本项目支持 Docker 容器化部署：
 
-成功后终端会打印生成图片的完整路径，文件名为时间戳 + 内容摘要。
+1. **构建镜像**
+   ```bash
+   docker build -t ascii2png .
+   ```
 
-### 图形界面
-```bash
-python main.py --gui
-```
-- 在文本框粘贴 ASCII 图表
-- 选择主题、字体大小、宽度与输出目录
-- 点击“生成 PNG”生成图片
+2. **运行容器**
+   ```bash
+   docker run -p 5000:5000 ascii2png
+   ```
+   访问 [http://localhost:5000](http://localhost:5000) 使用。
 
-## 输入格式与解析
-工具可识别以下常见结构：
-- 树形连接符：`├──`、`└──`、`│`、`─` 及其组合（类似 `tree` 命令输出）
-- ASCII 连接符：`|`、`+`、`-` 等
-- 缩进层级：以空格缩进表达父子关系（2 或 4 空格为一层）
+## API 接口
 
-示例：
-```
-知识架构
-├── 数据结构
-│   ├── 树
-│   └── 图
-└── 算法
-    ├── 动态规划
-    └── 贪心
-```
+应用提供 REST API 用于自动化集成：
 
-解析算法保持原始层级关系，将节点转为内部矢量节点，再进行布局与渲染。
+- **POST /generate**
+    - JSON Body:
+        - `text`: ASCII 文本内容 (必填)
+        - `theme`: 主题 (可选: `wechat`, `light`, `dark`, 默认 `minimal`)
+        - `width`: 图片宽度 (可选, 默认 1080)
+        - `font`: 字体大小 (可选, 默认 24)
+    - 返回: `{"image_url": "/output/..."}`
 
-## 布局与移动端优化
-- 固定宽度（默认 1080px），高度自适应
-- 自顶向下分层布局，节点左右对齐，边线简洁
-- 文本与线条进行 2x 超采样后再缩放，提升清晰度
+## 目录结构
 
-## 主题与字体
-- 主题：`wechat`、`light`、`dark`
-- 字体大小：14–48 像素可选，建议 22–28 保持移动端阅读舒适
-
-## 输出与命名
-- PNG 格式，保存到指定输出目录
-- 文件名：`YYYYMMDD_HHMMSS_内容摘要_短哈希.png`
-- 宽度：1080px，高度根据内容自适应
-
-## 文件大小控制
-- 默认使用 PNG 最优压缩与优化
-- 超过 1MB 时自动进行颜色量化与渐进缩放，尽量不影响可读性
-- 最多 5 次优化尝试，确保生成结果不超过 1MB（若内容极其庞大，则在清晰与体积之间平衡）
-
-## 错误处理
-- 输入校验：空内容或无法解析会提示错误
-- 批处理模式中单文件失败不影响其他文件
-- GUI 模式中将以弹窗提示错误信息
-
-## 建议
-- 优先使用树形连接符（`├──`、`└──`、`│`）表达层级，解析更准确
-- 层级不宜过深；可拆分为多张图提升移动端阅读体验
-- 字体过大可能影响体积与布局，建议 24 左右
+- `web_app.py`: Web 应用入口 (Flask)
+- `start.bat`: Windows 一键启动脚本
+- `Dockerfile`: Docker 构建文件
+- `ascii2png/`: 核心逻辑包
+    - `core.py`: 转换核心服务
+    - `render.py`: 渲染引擎
+    - `parser.py`: 文本解析
+- `templates/`: HTML 模板
+- `static/`: 静态资源
+- `tests/`: 单元测试
 
 ## 许可
 本项目用于示例与个人使用，可自由扩展。

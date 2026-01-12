@@ -230,12 +230,32 @@ def _shrink_png(img: Image.Image, text: str, output_dir: str) -> str:
         path = os.path.join(output_dir, f"{base}_opt{attempt}.png")
         palette.save(path, format="PNG", optimize=True, compress_level=9)
         if os.path.getsize(path) <= target:
+            # Clean up other attempts if any
+            _cleanup_attempts(output_dir, base, attempt)
             return path
+        
+        # Failed this attempt, remove it
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+            
         current = current.resize((int(current.width * 0.9), int(current.height * 0.9)), Image.LANCZOS)
         attempt += 1
     path = os.path.join(output_dir, f"{base}_final.png")
     current.save(path, format="PNG", optimize=True, compress_level=9)
+    # Clean up all attempts as we generated a final one
+    _cleanup_attempts(output_dir, base, attempt)
     return path
+
+def _cleanup_attempts(output_dir: str, base: str, max_attempt: int):
+    for i in range(max_attempt + 1):
+        p = os.path.join(output_dir, f"{base}_opt{i}.png")
+        if os.path.exists(p):
+            try:
+                os.remove(p)
+            except OSError:
+                pass
 
 def _summary(text: str) -> str:
     s = "".join(ch for ch in text.strip().splitlines()[0] if ch.isalnum() or ch in ("-", "_"))

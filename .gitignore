@@ -49,6 +49,6 @@ cover/
 
 # Project specific
 *.spec
-!ascii2png.spec
 *.log
+/output/
 *.manifest

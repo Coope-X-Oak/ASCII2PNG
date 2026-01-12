@@ -7,14 +7,13 @@ on:
       - 'v*'
   pull_request:
     branches: [ main, master ]
-  workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
-  build-macos:
-    runs-on: macos-latest
+  test:
+    runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
     
@@ -27,22 +26,14 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
-        pip install pyinstaller
-        brew install create-dmg
         
-    - name: Build macOS Application
+    - name: Run Tests
       run: |
-        chmod +x build_dmg.sh
-        ./build_dmg.sh
-        
-    - name: Upload DMG Artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: ASCII2PNG-macOS-DMG
-        path: dist/ASCII2PNG.dmg
-        compression-level: 0
+        export PYTHONPATH=$PYTHONPATH:.
+        python -m unittest discover tests
 
   build-windows:
+    needs: test
     runs-on: windows-latest
     steps:
     - uses: actions/checkout@v4
@@ -56,44 +47,87 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
-        pip install pyinstaller
         
-    - name: Build Windows EXE
+    - name: Build EXE
       run: |
-        .\build_exe.bat
+        pyinstaller --name "ASCII2PNG" --onefile --console --add-data "templates;templates" --add-data "static;static" web_app.py
         
     - name: Upload EXE Artifact
       uses: actions/upload-artifact@v4
       with:
         name: ASCII2PNG-Windows-EXE
         path: dist/ASCII2PNG.exe
-        compression-level: 0
+
+  build-macos:
+    needs: test
+    runs-on: macos-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+        
+    - name: Install Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        brew install create-dmg
+        
+    - name: Build DMG
+      run: |
+        # Build single file executable (console mode)
+        pyinstaller --name "ASCII2PNG" --onefile --console --add-data "templates:templates" --add-data "static:static" web_app.py
+        
+        # Prepare folder for DMG
+        mkdir -p dmg_source
+        cp dist/ASCII2PNG dmg_source/
+        
+        # Create DMG
+        create-dmg \
+          --volname "ASCII2PNG Installer" \
+          --volicon "static/favicon.ico" \
+          --window-pos 200 120 \
+          --window-size 800 400 \
+          --icon-size 100 \
+          --icon "ASCII2PNG" 200 190 \
+          --hide-extension "ASCII2PNG" \
+          --app-drop-link 600 185 \
+          "dist/ASCII2PNG.dmg" \
+          "dmg_source/"
+      # Note: static/favicon.ico might not exist or be a valid icns, but create-dmg warns and continues usually.
+      # If icon fails, it just uses default.
+        
+    - name: Upload DMG Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ASCII2PNG-macOS-DMG
+        path: dist/ASCII2PNG.dmg
 
   release:
-    needs: [build-macos, build-windows]
+    needs: [build-windows, build-macos]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
     steps:
-    - name: Download macOS Artifact
-      uses: actions/download-artifact@v4
-      with:
-        name: ASCII2PNG-macOS-DMG
-        
     - name: Download Windows Artifact
       uses: actions/download-artifact@v4
       with:
         name: ASCII2PNG-Windows-EXE
+        path: dist_win
         
-    - name: Display structure of downloaded files
-      run: ls -R
-      
+    - name: Download macOS Artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: ASCII2PNG-macOS-DMG
+        path: dist_mac
+        
     - name: Release
       uses: softprops/action-gh-release@v1
-      if: startsWith(github.ref, 'refs/tags/')
       with:
         files: |
-          ASCII2PNG.dmg
-          ASCII2PNG.exe
+          dist_win/ASCII2PNG.exe
+          dist_mac/ASCII2PNG.dmg
         draft: false
         prerelease: false
       env:
