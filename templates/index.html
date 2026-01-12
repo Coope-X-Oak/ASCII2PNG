@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ASCII 架构图生成器</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Controls -->
+        <div class="controls">
+            <h1>ASCII 架构图生成器</h1>
+            
+            <div class="input-group">
+                <label for="ascii-input">输入 ASCII 树状图</label>
+                <textarea id="ascii-input" placeholder="Project
+├── src
+│   ├── main.py
+│   └── utils.py
+└── README.md">Project
+├── src
+│   ├── main.py
+│   └── utils.py
+└── README.md</textarea>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem;">
+                <div>
+                    <label for="layout-mode" style="display:block; margin-bottom: 0.5rem; font-weight: 500;">排版模式</label>
+                    <select id="layout-mode" class="form-select">
+                        <option value="horizontal" selected>现代横排 (Modern)</option>
+                        <option value="vertical">古籍竖排 (RTL Vertical)</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="line-style" style="display:block; margin-bottom: 0.5rem; font-weight: 500;">线条样式 & 颜色</label>
+                    <div style="display: flex; gap: 0.5rem;">
+                        <select id="line-style" class="form-select" style="flex: 1;">
+                            <option value="solid" selected>实线 (Solid)</option>
+                            <option value="dotted">点线 (Dotted)</option>
+                            <option value="dashed">虚线 (Dashed)</option>
+                            <option value="wave">波浪线 (Wave)</option>
+                            <option value="cloud">云纹 (Cloud)</option>
+                        </select>
+                        <input type="color" id="line-color" value="#333333" style="height: 45px; width: 60px; padding: 2px; border: 2px solid #e2e8f0; border-radius: 8px; cursor: pointer; background: white;" title="点击选择颜色">
+                    </div>
+                    <div style="margin-top: 5px; font-size: 0.8rem; color: #666; display: flex; align-items: center;">
+                         <input type="checkbox" id="enable-color" style="margin-right: 5px;"> 启用自定义颜色
+                    </div>
+                </div>
+            </div>
+
+            <div>
+                <label style="display:block; margin-bottom: 0.5rem;">选择风格</label>
+                <div class="style-selector" id="style-selector">
+                    <div class="style-option style-minimal active" data-style="minimal" data-name="简约">
+                        <div class="style-preview">M</div>
+                    </div>
+                    <div class="style-option style-business" data-style="business" data-name="商务">
+                        <div class="style-preview">B</div>
+                    </div>
+                    <div class="style-option style-art" data-style="art" data-name="艺术">
+                        <div class="style-preview">A</div>
+                    </div>
+                    <div class="style-option style-tech" data-style="tech" data-name="科技">
+                        <div class="style-preview">T</div>
+                    </div>
+                    <div class="style-option style-nature" data-style="nature" data-name="自然">
+                        <div class="style-preview">N</div>
+                    </div>
+                </div>
+            </div>
+
+            <button class="btn-generate" id="btn-generate">生成图片</button>
+        </div>
+
+        <!-- Preview -->
+        <div class="preview-panel">
+            <div class="loading" id="loading">正在生成...</div>
+            <img src="" alt="Preview" class="preview-image" id="preview-image">
+        </div>
+    </div>
+
+    <script>
+        const btnGenerate = document.getElementById('btn-generate');
+        const inputAscii = document.getElementById('ascii-input');
+        const styleSelector = document.getElementById('style-selector');
+        const previewImage = document.getElementById('preview-image');
+        const loading = document.getElementById('loading');
+        const layoutMode = document.getElementById('layout-mode');
+        const lineStyle = document.getElementById('line-style');
+        const lineColor = document.getElementById('line-color');
+        const enableColor = document.getElementById('enable-color');
+        
+        let currentStyle = 'minimal';
+
+        // Style Selection
+        styleSelector.addEventListener('click', (e) => {
+            const option = e.target.closest('.style-option');
+            if (!option) return;
+
+            document.querySelectorAll('.style-option').forEach(el => el.classList.remove('active'));
+            option.classList.add('active');
+            currentStyle = option.dataset.style;
+        });
+
+        // Generate
+        btnGenerate.addEventListener('click', async () => {
+            const text = inputAscii.value;
+            if (!text.trim()) return;
+
+            btnGenerate.disabled = true;
+            btnGenerate.textContent = '生成中...';
+            loading.classList.add('active');
+            previewImage.classList.remove('loaded');
+
+            try {
+                const response = await fetch('/generate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        text: text,
+                        theme: currentStyle,
+                        layout_mode: layoutMode.value,
+                        line_style: lineStyle.value,
+                        line_color: enableColor.checked ? lineColor.value : null,
+                        width: 1080
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (data.error) {
+                    alert('错误: ' + data.error);
+                } else {
+                    previewImage.src = data.image_url + '?t=' + new Date().getTime(); // Prevent cache
+                    previewImage.onload = () => {
+                        previewImage.classList.add('loaded');
+                    };
+                }
+
+            } catch (err) {
+                alert('网络错误: ' + err.message);
+            } finally {
+                btnGenerate.disabled = false;
+                btnGenerate.textContent = '生成图片';
+                loading.classList.remove('active');
+            }
+        });
+
+        // Initial trigger
+        // setTimeout(() => btnGenerate.click(), 500);
+    </script>
+</body>
+</html>
